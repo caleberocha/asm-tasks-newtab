@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ASM - Abrir tarefa em nova aba
 // @namespace    http://tampermonkey.net/
-// @version      0.1
+// @version      0.2
 // @description  Toma essa ASM!!!
 // @author       Calebe
 // @match        https://asm.procempa.com.br/View/Web/Forms/FrmListTask.aspx*
@@ -9,51 +9,188 @@
 // ==/UserScript==
 
 (function() {
-    var scr = document.createElement('script');
+    const scr = document.createElement('script');
     scr.innerHTML = `
-        var aspxCallback = function (result, context) {
-        var collection = aspxGetControlCollection();
-        collection.DoFinalizeCallback();
-        var control = collection.Get(context);
-        if (control != null)
-            control.DoCallback = function (result) {
-            if (
-                this.IsCallbackAnimationEnabled() &&
-                this.CheckBeginCallbackAnimationInProgress(result)
-            )
-                return;
-            result = _aspxTrim(result);
-            if (result.indexOf(__aspxCallbackResultPrefix) != 0)
-                this.ProcessCallbackGeneralError(result);
-            else {
-                var resultObj = null;
-                try {
-                resultObj = this.EvalCallbackResult(result);
-                } catch (e) {}
-                if (resultObj) {
-                if (resultObj.redirect) {
-                    window.open(resultObj.redirect);
-                } else if (resultObj.generalError) {
-                    this.ProcessCallbackGeneralError(resultObj.generalError);
-                } else {
-                    var errorObj = resultObj.error;
-                    if (errorObj) this.ProcessCallbackError(errorObj);
-                    else {
-                    if (resultObj.cp) {
-                        for (var name in resultObj.cp) this[name] = resultObj.cp[name];
-                    }
-                    var callbackInfo = this.DequeueCallbackInfo(resultObj.id);
-                    if (callbackInfo.type == ASPxCallbackType.Data)
-                        this.ProcessCustomDataCallback(resultObj.result, callbackInfo);
-                    else this.ProcessCallback(resultObj.result);
-                    }
-                }
-                }
-            }
-            this.DoLoadCallbackScripts();
-            };
-        control.DoCallback(result);
+      let getTaskUrl = async function (index) {
+        const getCallBackParam = function (index) {
+            var cKV = $(
+                "#ctl00_phMain_pnlMain_UcViewManagerList_grvObjectCatalog_DXKVInput"
+            ).val();
+            var cFR = index + ""; //$("#ctl00_phMain_pnlMain_UcViewManagerList_grvObjectCatalog_DXFocusedRowInput").val();
+            var cCR = $(
+                "#ctl00_phMain_pnlMain_UcViewManagerList_grvObjectCatalog_DXColResizedInput"
+            ).val();
+
+            return (
+                "c0:" +
+                "KV|" +
+                cKV.length +
+                ";" +
+                cKV +
+                ";" +
+                "FR|" +
+                cFR.length +
+                ";" +
+                cFR +
+                ";" +
+                "CR|" +
+                cCR.length +
+                ";" +
+                cCR +
+                ";" +
+                "GB|19;14|CUSTOMCALLBACK0|;"
+            );
         };
-    `;
+        $("#ctl00_hdnContext_I").val(
+            "12|#|defaultStyleCSS|4|23|1../../../css/style.cssAction|4|8|1nviEdit#"
+        );
+        $(
+            "#ctl00_phMain_pnlMain_UcViewManagerList_grvObjectCatalog_DXFocusedRowInput"
+        ).val(index);
+        $(
+            "#ctl00_phMain_pnlMain_UcViewManagerList_grvObjectCatalog_DXColResizedInput"
+        ).val('{"ctrlWidth":1571}');
+        $("#ctl00_phMain_pnlMain_txtRegisters").val(index);
+        if ($("#__CALLBACKID").length == 0) {
+            $("#aspnetForm").append(
+                $("<input>").attr({
+                    type: "hidden",
+                    name: "__CALLBACKID",
+                    id: "__CALLBACKID",
+                })
+            );
+        }
+        if ($("#__CALLBACKPARAM").length == 0) {
+            $("#aspnetForm").append(
+                $("<input>").attr({
+                    type: "hidden",
+                    name: "__CALLBACKPARAM",
+                    id: "__CALLBACKPARAM",
+                })
+            );
+        }
+        $("#__CALLBACKID").val(
+            "ctl00$phMain$pnlMain$UcViewManagerList$grvObjectCatalog"
+        );
+        $("#__CALLBACKPARAM").val(getCallBackParam(index));
+
+        var promise = await $.post(
+            "https://asm.procempa.com.br/View/Web/Forms/FrmListTask.aspx?MenuNameParent=liMniTasks",
+            $("#aspnetForm").serialize()
+        );
+        let m = promise.match(/'redirect':'(.+?)',/);
+        if (m) return m[1];
+        throw promise;
+    };
+
+    let getColumnIndex = function (headerText) {
+        let index = -1;
+        document
+            .querySelector(
+            "#ctl00_phMain_pnlMain_UcViewManagerList_grvObjectCatalog_DXHeadersRow0"
+        )
+            .childNodes.forEach(function (e, i) {
+            if (e.innerText && e.innerText.match(headerText)) {
+                index = i;
+                return;
+            }
+        });
+
+        return index;
+    };
+
+    let getTaskRow = function (task) {
+        let tr = null;
+        document
+            .querySelectorAll("#tasksLoader tr.dxgvDataRow_Aqua")
+            .forEach(function (e) {
+            const td = e.querySelectorAll("td");
+            if (td[0].innerText == task) {
+                tr = e;
+            }
+        });
+        return tr;
+    };
+
+    let updateTaskRow = function (task, text = "Carregando...") {
+        const tr = getTaskRow(task);
+        if(tr) {
+            tr.childNodes[1].innerHTML = text;
+        } else {
+            const table = document.querySelector("#tasksLoader table.dxgvTable_Aqua tbody");
+            table.insertAdjacentHTML(
+                "beforeend",
+                "<tr class='dxgvDataRow_Aqua'><td class='dxgv'>" +
+                task +
+                "</td><td class='dxgv'>" +
+                text +
+                "</td></tr>"
+            );
+        }
+    };
+
+    let getTask = function (index, element) {
+        console.log(index);
+        console.log(element);
+
+        const idx = getColumnIndex("Número");
+        if (idx === -1) {
+            alert("Coluna Número não encontrada!");
+            console.error("Coluna Número não encontrada!");
+            return;
+        }
+
+        const taskNumber =
+              element.parentElement.parentElement.childNodes[idx].innerText;
+        updateTaskRow(taskNumber);
+        getTaskUrl(index).then(function (data) {
+            if (!data) {
+                console.error("Link não obtido");
+                return;
+            }
+
+            const url = "http://asm.procempa.com.br/View/Web/Forms/" + data;
+            updateTaskRow(
+                taskNumber,
+                "<a href=" + url + " target='_blank'>" + url + "</a>"
+            );
+        });
+    };`
+
+    let updateLinks = function () {
+        document
+            .querySelectorAll(".dxgvCommandColumn_Aqua > img[title='Editar']")
+            .forEach(function (e) {
+            var r = e
+            .getAttribute("onclick")
+            .match(/\['CustomButton','nviEdit',([0-9]+)\].*$/);
+
+            if (!r) return;
+
+            var index = r[1];
+            if (index !== null && index !== undefined)
+                e.setAttribute("onclick", `getTask(${index}, this)`);
+        });
+    };
+
+    document.querySelector("#floatingNavmenu").insertAdjacentHTML(
+        "beforeend", `
+        <div id="tasksLoader">
+          <table class="dxgvTable_Aqua">
+            <tbody>
+              <tr>
+                <th class="dxgvHeader_Aqua">Tarefa</th>
+                <th class="dxgvHeader_Aqua">Link</th>
+              </tr>
+            </tbody>
+          </table>
+        </div>`
+    )
+
+    setInterval(
+        updateLinks,
+        500
+    );
+
     document.body.appendChild(scr);
 })();
