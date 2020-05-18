@@ -1,14 +1,18 @@
 // ==UserScript==
 // @name         ASM - Abrir tarefa em nova aba
 // @namespace    http://tampermonkey.net/
-// @version      0.2
+// @version      0.3
 // @description  Toma essa ASM!!!
 // @author       Calebe
 // @match        https://asm.procempa.com.br/View/Web/Forms/FrmListTask.aspx*
-// @grant        none
+// @grant        GM.getValue
+// @grant        GM.setValue
 // ==/UserScript==
 
 (function() {
+    const tableStorageKey = "tasksLoader";
+    const defaultTable = `<div id="tasksLoader"><table class="dxgvTable_Aqua"><tbody><tr><th class="dxgvHeader_Aqua">Tarefa</th><th class="dxgvHeader_Aqua">Link</th><th class="dxgvHeader_Aqua">Excluir</th></tr></tbody></table></div>`;
+
     const scr = document.createElement('script');
     scr.innerHTML = `
       let getTaskUrl = async function (index) {
@@ -124,15 +128,16 @@
                 task +
                 "</td><td class='dxgv'>" +
                 text +
-                "</td></tr>"
+                "</td><td class='dxgv' style='text-align: center;'><img title='Excluir' style='cursor:pointer' src='../../../Images/cross.png' onclick='deleteLine(this)'></td></tr>"
             );
         }
     };
 
-    let getTask = function (index, element) {
-        console.log(index);
-        console.log(element);
+    let deleteLine = function(element) {
+        element.parentNode.parentNode.remove();
+    };
 
+    let getTask = function (index, element) {
         const idx = getColumnIndex("Número");
         if (idx === -1) {
             alert("Coluna Número não encontrada!");
@@ -155,7 +160,7 @@
                 "<a href=" + url + " target='_blank'>" + url + "</a>"
             );
         });
-    };`
+    };`;
 
     let updateLinks = function () {
         document
@@ -173,24 +178,30 @@
         });
     };
 
-    document.querySelector("#floatingNavmenu").insertAdjacentHTML(
-        "beforeend", `
-        <div id="tasksLoader">
-          <table class="dxgvTable_Aqua">
-            <tbody>
-              <tr>
-                <th class="dxgvHeader_Aqua">Tarefa</th>
-                <th class="dxgvHeader_Aqua">Link</th>
-              </tr>
-            </tbody>
-          </table>
-        </div>`
-    )
+    const storeTable = function() {
+        setInterval(
+        function() {
+            if(document.querySelector("#tasksLoader"))
+                GM.setValue(tableStorageKey, document.querySelector("#tasksLoader").outerHTML);
+        },
+        1000
+    )};
+
+    GM.getValue(tableStorageKey, defaultTable).then(function(data) {
+        document.querySelector("#floatingNavmenu").insertAdjacentHTML(
+            "beforeend", data
+        );
+        storeTable();
+    });
 
     setInterval(
         updateLinks,
         500
     );
 
+
+
     document.body.appendChild(scr);
+
+
 })();
