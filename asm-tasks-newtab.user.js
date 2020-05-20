@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ASM - Abrir tarefa em nova aba
 // @namespace    http://tampermonkey.net/
-// @version      0.32
+// @version      0.33
 // @description  Toma essa ASM!!!
 // @author       Calebe
 // @match        https://asm.procempa.com.br/View/Web/Forms/FrmListTask.aspx*
@@ -229,6 +229,12 @@
             if(document.querySelector(`#${idTableKey}`)) {
                 document.querySelector(`#${idTableShadowCopy}`).innerHTML = document.querySelector(`#${idTableKey}`).innerHTML;
                 document.querySelectorAll(`#${idTableShadowCopy} *`).forEach(function(e) {e.removeAttribute("style"); e.removeAttribute("class");})
+                document.querySelectorAll(`#${idTableShadowCopy} > table > tbody > tr`).forEach(function(e) {
+                    const sel = e.querySelector("td:nth-child(2), th:nth-child(2)");
+                    if(sel && sel.innerHTML.match("Carregando...")) {
+                        e.remove();
+                    }
+                });
                 GM.setValue(idTableKey, document.querySelector(`#${idTableShadowCopy}`).innerHTML);
             }
         },
