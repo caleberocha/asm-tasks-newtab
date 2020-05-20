@@ -1,26 +1,36 @@
 // ==UserScript==
 // @name         ASM - Abrir tarefa em nova aba
 // @namespace    http://tampermonkey.net/
-// @version      0.31
+// @version      0.32
 // @description  Toma essa ASM!!!
 // @author       Calebe
 // @match        https://asm.procempa.com.br/View/Web/Forms/FrmListTask.aspx*
 // @grant        GM.getValue
 // @grant        GM.setValue
+// @grant        GM.deleteValue
 // ==/UserScript==
 
 (function() {
-    const tableStorageKey = "tasksLoader";
-    const defaultTable = `<div id="tasksLoader"><table class="dxgvTable_Aqua"><tbody><tr><th class="dxgvHeader_Aqua">Tarefa</th><th class="dxgvHeader_Aqua">Link</th><th class="dxgvHeader_Aqua">Excluir</th></tr></tbody></table></div>`;
+    const idTableKey = "tasksLoader";
+    const idTableShadowCopy = idTableKey + "ShadowCopy";
+    const defaultTable = `<table><thead><tr><th>Tarefa</th><th>Link</th><th>Excluir</th></tr></thead><tbody></tbody></table>`;
 
+    const divContainer = document.createElement("div");
+    divContainer.id = idTableKey;
+
+    const divContainerShadowCopy = document.createElement("div");
+    divContainerShadowCopy.id = idTableShadowCopy;
+    divContainerShadowCopy.style.display = "none";
+
+    // GM.deleteValue(idTableKey);
     const scr = document.createElement('script');
     scr.innerHTML = `
-      let getTaskUrl = async function (index) {
+      const getTaskUrl = async function (index) {
         const getCallBackParam = function (index) {
             var cKV = $(
                 "#ctl00_phMain_pnlMain_UcViewManagerList_grvObjectCatalog_DXKVInput"
             ).val();
-            var cFR = index + ""; //$("#ctl00_phMain_pnlMain_UcViewManagerList_grvObjectCatalog_DXFocusedRowInput").val();
+            var cFR = index + "";
             var cCR = $(
                 "#ctl00_phMain_pnlMain_UcViewManagerList_grvObjectCatalog_DXColResizedInput"
             ).val();
@@ -79,7 +89,7 @@
         $("#__CALLBACKPARAM").val(getCallBackParam(index));
 
         var promise = await $.post(
-            "https://asm.procempa.com.br/View/Web/Forms/FrmListTask.aspx?MenuNameParent=liMniTasks",
+            "FrmListTask.aspx?MenuNameParent=liMniTasks",
             $("#aspnetForm").serialize()
         );
         let m = promise.match(/'redirect':'(.+?)',/);
@@ -87,7 +97,7 @@
         throw promise;
     };
 
-    let getColumnIndex = function (headerText) {
+    const getColumnIndex = function (headerText) {
         let index = -1;
         document
             .querySelector(
@@ -103,41 +113,49 @@
         return index;
     };
 
-    let getTaskRow = function (task) {
+    const getTaskRow = function (task) {
         let tr = null;
         document
-            .querySelectorAll("#tasksLoader tr.dxgvDataRow_Aqua")
+            .querySelectorAll("#${idTableKey} > table > tbody > tr")
             .forEach(function (e) {
             const td = e.querySelectorAll("td");
-            if (td[0].innerText == task) {
+            if (td.length > 0 && td[0].innerText == task) {
                 tr = e;
             }
         });
         return tr;
     };
 
-    let updateTaskRow = function (task, text = "Carregando...") {
+    const updateTaskRow = function (task, text = "Carregando...") {
         const tr = getTaskRow(task);
         if(tr) {
             tr.childNodes[1].innerHTML = text;
+            tr.scrollIntoViewIfNeeded();
         } else {
-            const table = document.querySelector("#tasksLoader table.dxgvTable_Aqua tbody");
-            table.insertAdjacentHTML(
-                "beforeend",
-                "<tr class='dxgvDataRow_Aqua'><td class='dxgv'>" +
+            const table = document.querySelector("#${idTableKey} > table > tbody");
+            const trc = document.createElement("tr");
+            trc.innerHTML = "<td>" +
                 task +
-                "</td><td class='dxgv'>" +
+                "</td><td>" +
                 text +
-                "</td><td class='dxgv' style='text-align: center;'><img title='Excluir' style='cursor:pointer' src='../../../Images/cross.png' onclick='deleteLine(this)'></td></tr>"
+                "</td><td>" +
+                "<img title='Excluir' src='../../../Images/cross.png' onclick='deleteLine(this)'>" +
+                "</td>";
+            trc.className = "dxgvDataRow_Aqua";
+            trc.querySelectorAll("td").forEach(function(e) {e.className = "dxgv"});
+            table.insertAdjacentElement(
+                "beforeend",
+                trc
             );
+            trc.scrollIntoViewIfNeeded();
         }
     };
 
-    let deleteLine = function(element) {
+    const deleteLine = function(element) {
         element.parentNode.parentNode.remove();
     };
 
-    let getTask = function (index, element) {
+    const getTask = function (index, element) {
         const idx = getColumnIndex("Número");
         if (idx === -1) {
             alert("Coluna Número não encontrada!");
@@ -154,15 +172,14 @@
                 return;
             }
 
-            const url = "http://asm.procempa.com.br/View/Web/Forms/" + data;
             updateTaskRow(
                 taskNumber,
-                "<a href=" + url + " target='_blank'>" + url + "</a>"
+                "<a href=" + data + " target='asm_task_" + taskNumber + "'>" + data + "</a>"
             );
         });
     };`;
 
-    let updateLinks = function () {
+    const updateLinks = function () {
         document
             .querySelectorAll(".dxgvCommandColumn_Aqua > img[title='Editar']")
             .forEach(function (e) {
@@ -178,19 +195,57 @@
         });
     };
 
+    const applyCss = function() {
+        const style = `
+            <style>
+            #${idTableKey} {
+                max-height: 10.5em;
+                width: fit-content;
+                overflow-y: auto;
+            }
+            #${idTableKey} > table {
+                vertical-align: middle;
+            }
+            #${idTableKey} > table > tbody > tr > td:nth-child(3) {
+                text-align: center;
+            }
+            #${idTableKey} > table > tbody > tr > td:nth-child(3) > img {
+                cursor: pointer;
+            }
+            </style>
+        `;
+
+        document.head.insertAdjacentHTML("beforeend", style);
+
+        document.querySelector(`#${idTableKey} > table`).className = "dxgvTable_Aqua";
+        document.querySelectorAll(`#${idTableKey} > table > tbody > tr`).forEach(function(e) {e.className = "dxgvDataRow_Aqua"});
+        document.querySelectorAll(`#${idTableKey} > table th`).forEach(function(e) {e.className = "dxgvHeader_Aqua"});
+        document.querySelectorAll(`#${idTableKey} > table > tbody td`).forEach(function(e) {e.className = "dxgv"});
+    }
+
     const storeTable = function() {
         setInterval(
         function() {
-            if(document.querySelector("#tasksLoader"))
-                GM.setValue(tableStorageKey, document.querySelector("#tasksLoader").outerHTML);
+            if(document.querySelector(`#${idTableKey}`)) {
+                document.querySelector(`#${idTableShadowCopy}`).innerHTML = document.querySelector(`#${idTableKey}`).innerHTML;
+                document.querySelectorAll(`#${idTableShadowCopy} *`).forEach(function(e) {e.removeAttribute("style"); e.removeAttribute("class");})
+                GM.setValue(idTableKey, document.querySelector(`#${idTableShadowCopy}`).innerHTML);
+            }
         },
         1000
     )};
 
-    GM.getValue(tableStorageKey, defaultTable).then(function(data) {
-        document.querySelector("#floatingNavmenu").insertAdjacentHTML(
+    GM.getValue(idTableKey, defaultTable).then(function(data) {
+        const m = data.match(/(\<table.+\<\/table\>)/);
+        if(m)
+            data = m[1];
+        document.body.insertAdjacentElement("beforeend", divContainerShadowCopy);
+        document.querySelector("#floatingNavmenu").insertAdjacentElement(
+            "beforeend", divContainer
+        ).insertAdjacentHTML(
             "beforeend", data
         );
+        applyCss();
         storeTable();
     });
 
@@ -199,9 +254,5 @@
         500
     );
 
-
-
     document.body.appendChild(scr);
-
-
 })();
