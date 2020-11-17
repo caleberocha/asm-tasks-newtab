@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ASM - Abrir tarefa em nova aba
 // @namespace    http://tampermonkey.net/
-// @version      0.33
+// @version      0.34
 // @description  Toma essa ASM!!!
 // @author       Calebe
 // @match        https://asm.procempa.com.br/View/Web/Forms/FrmListTask.aspx*
@@ -176,6 +176,11 @@
                 taskNumber,
                 "<a href=" + data + " target='asm_task_" + taskNumber + "'>" + data + "</a>"
             );
+        }, function(e) {
+            updateTaskRow(
+               taskNumber,
+               "Erro " + e.status + ": " + (e.responseText ? $(e.responseText).text() : e.statusText)
+            );
         });
     };`;
 
@@ -190,8 +195,9 @@
             if (!r) return;
 
             var index = r[1];
-            if (index !== null && index !== undefined)
+            if (index !== null && index !== undefined) {
                 e.setAttribute("onclick", `getTask(${index}, this)`);
+            }
         });
     };
 
